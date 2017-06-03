@@ -13,6 +13,18 @@ npm install -g create-react-app
 
 create-react-app my-app --scripts-version @just-boris/preact-scripts
 cd my-app/
+```
+
+Because of [the issue in Create-react-app](https://github.com/facebookincubator/create-react-app/issues/2462) you will need to replace React with Preact manually:
+
+```sh 
+npm uninstall react react-dom
+npm install preact preact-compat # the second one is optional
+```
+
+Now you can start dev-server
+
+```
 npm start
 ```
 
