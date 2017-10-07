@@ -1,10 +1,8 @@
 /**
  * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 'use strict';
 
@@ -13,7 +11,8 @@ const fs = require('fs');
 const path = require('path');
 const url = require('url');
 const chalk = require('chalk');
-const detect = require('@timer/detect-port');
+const detect = require('detect-port-alt');
+const isRoot = require('is-root');
 const inquirer = require('inquirer');
 const clearConsole = require('./clearConsole');
 const formatWebpackMessages = require('./formatWebpackMessages');
@@ -161,6 +160,11 @@ function createCompiler(webpack, config, appName, urls, useYarn) {
 
     // If errors exist, only show errors.
     if (messages.errors.length) {
+      // Only keep the first error. Others are often indicative
+      // of the same problem, but confuse the reader with noise.
+      if (messages.errors.length > 1) {
+        messages.errors.length = 1;
+      }
       console.log(chalk.red('Failed to compile.\n'));
       console.log(messages.errors.join('\n\n'));
       return;
@@ -378,6 +382,11 @@ function choosePort(host, defaultPort) {
       if (port === defaultPort) {
         return resolve(port);
       }
+      const message = process.platform !== 'win32' &&
+        defaultPort < 1024 &&
+        !isRoot()
+        ? `Admin permissions are required to run a server on a port below 1024.`
+        : `Something is already running on port ${defaultPort}.`;
       if (isInteractive) {
         clearConsole();
         const existingProcess = getProcessForPort(defaultPort);
@@ -385,7 +394,7 @@ function choosePort(host, defaultPort) {
           type: 'confirm',
           name: 'shouldChangePort',
           message: chalk.yellow(
-            `Something is already running on port ${defaultPort}.` +
+            message +
               `${existingProcess ? ` Probably:\n  ${existingProcess}` : ''}`
           ) + '\n\nWould you like to run the app on another port instead?',
           default: true,
@@ -398,9 +407,7 @@ function choosePort(host, defaultPort) {
           }
         });
       } else {
-        console.log(
-          chalk.red(`Something is already running on port ${defaultPort}.`)
-        );
+        console.log(chalk.red(message));
         resolve(null);
       }
     }),

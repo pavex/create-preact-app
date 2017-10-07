@@ -1,10 +1,8 @@
 /**
  * Copyright (c) 2015-present, Facebook, Inc.
- * All rights reserved.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -47,6 +45,7 @@ const semver = require('semver');
 const dns = require('dns');
 const tmp = require('tmp');
 const unpack = require('tar-pack').unpack;
+const url = require('url');
 const hyperquest = require('hyperquest');
 
 const packageJson = require('./package.json');
@@ -137,11 +136,7 @@ function createApp(name, verbose, version, template) {
 
   checkAppName(appName);
   fs.ensureDirSync(name);
-  if (!isSafeToCreateProjectIn(root)) {
-    console.log(
-      `The directory ${chalk.green(name)} contains files that could conflict.`
-    );
-    console.log('Try using a new directory name.');
+  if (!isSafeToCreateProjectIn(root, name)) {
     process.exit(1);
   }
 
@@ -163,7 +158,7 @@ function createApp(name, verbose, version, template) {
   if (!semver.satisfies(process.version, '>=6.0.0')) {
     console.log(
       chalk.yellow(
-        `You are using Node ${process.version} so the project will be boostrapped with an old unsupported version of tools.\n\n` +
+        `You are using Node ${process.version} so the project will be bootstrapped with an old unsupported version of tools.\n\n` +
           `Please update to Node 6 or higher for a better, fully supported experience.\n`
       )
     );
@@ -218,7 +213,13 @@ function install(useYarn, dependencies, verbose, isOnline) {
       }
     } else {
       command = 'npm';
-      args = ['install', '--save', '--save-exact'].concat(dependencies);
+      args = [
+        'install',
+        '--save',
+        '--save-exact',
+        '--loglevel',
+        'error',
+      ].concat(dependencies);
     }
 
     if (verbose) {
@@ -250,7 +251,7 @@ function run(
   const packageToInstall = getInstallPackage(version);
   const allDependencies = ['preact', packageToInstall];
 
-  console.log('Installing packages. This might take a couple minutes.');
+  console.log('Installing packages. This might take a couple of minutes.');
   getPackageName(packageToInstall)
     .then(packageName => checkIfOnline(useYarn).then(isOnline => ({
       isOnline: isOnline,
@@ -270,11 +271,7 @@ function run(
     })
     .then(packageName => {
       checkNodeVersion(packageName);
-
-      // Since react-scripts has been installed with --save
-      // we need to move it into devDependencies and rewrite package.json
-      // also ensure react dependencies have caret version range
-      fixDependencies(packageName);
+      setCaretRangeForRuntimeDeps(packageName);
 
       const scriptsPath = path.resolve(
         process.cwd(),
@@ -428,8 +425,8 @@ function getPackageName(installPackage) {
     // Pull package name out of git urls e.g:
     // git+https://github.com/mycompany/react-scripts.git
     // git+ssh://github.com/mycompany/react-scripts.git#v1.2.3
-    return Promise.resolve(installPackage.match(/([^\/]+)\.git(#.*)?$/)[1]);
-  } else if (installPackage.indexOf('@') > 0) {
+    return Promise.resolve(installPackage.match(/([^/]+)\.git(#.*)?$/)[1]);
+  } else if (installPackage.match(/.+@/)) {
     // Do not match @scope/ when stripping off @version or @tag
     return Promise.resolve(
       installPackage.charAt(0) + installPackage.substr(1).split('@')[0]
@@ -491,16 +488,14 @@ function checkAppName(appName) {
   }
 
   // TODO: there should be a single place that holds the dependencies
-  const dependencies = ['preact'];
-  const devDependencies = ['react-scripts'];
-  const allDependencies = dependencies.concat(devDependencies).sort();
-  if (allDependencies.indexOf(appName) >= 0) {
+  const dependencies = ['preact', 'react-scripts'].sort();
+  if (dependencies.indexOf(appName) >= 0) {
     console.error(
       chalk.red(
         `We cannot create a project called ${chalk.green(appName)} because a dependency with the same name exists.\n` +
           `Due to the way npm works, the following names are not allowed:\n\n`
       ) +
-        chalk.cyan(allDependencies.map(depName => `  ${depName}`).join('\n')) +
+        chalk.cyan(dependencies.map(depName => `  ${depName}`).join('\n')) +
         chalk.red('\n\nPlease choose a different project name.')
     );
     process.exit(1);
@@ -527,7 +522,7 @@ function makeCaretRange(dependencies, name) {
   dependencies[name] = patchedVersion;
 }
 
-function fixDependencies(packageName) {
+function setCaretRangeForRuntimeDeps(packageName) {
   const packagePath = path.join(process.cwd(), 'package.json');
   const packageJson = require(packagePath);
 
@@ -537,15 +532,10 @@ function fixDependencies(packageName) {
   }
 
   const packageVersion = packageJson.dependencies[packageName];
-
   if (typeof packageVersion === 'undefined') {
     console.error(chalk.red(`Unable to find ${packageName} in package.json`));
     process.exit(1);
   }
-
-  packageJson.devDependencies = packageJson.devDependencies || {};
-  packageJson.devDependencies[packageName] = packageVersion;
-  delete packageJson.dependencies[packageName];
 
   makeCaretRange(packageJson.dependencies, 'preact');
 
@@ -555,7 +545,7 @@ function fixDependencies(packageName) {
 // If project only contains files generated by GH, it’s safe.
 // We also special case IJ-based products .idea because it integrates with CRA:
 // https://github.com/facebookincubator/create-react-app/pull/368#issuecomment-243446094
-function isSafeToCreateProjectIn(root) {
+function isSafeToCreateProjectIn(root, name) {
   const validFiles = [
     '.DS_Store',
     'Thumbs.db',
@@ -569,7 +559,28 @@ function isSafeToCreateProjectIn(root) {
     '.hgignore',
     '.hgcheck',
   ];
-  return fs.readdirSync(root).every(file => validFiles.indexOf(file) >= 0);
+  console.log();
+
+  const conflicts = fs
+    .readdirSync(root)
+    .filter(file => !validFiles.includes(file));
+  if (conflicts.length < 1) {
+    return true;
+  }
+
+  console.log(
+    `The directory ${chalk.green(name)} contains files that could conflict:`
+  );
+  console.log();
+  for (const file of conflicts) {
+    console.log(`  ${file}`);
+  }
+  console.log();
+  console.log(
+    'Either try using a new directory name, or remove the files listed above.'
+  );
+
+  return false;
 }
 
 function checkIfOnline(useYarn) {
@@ -581,7 +592,15 @@ function checkIfOnline(useYarn) {
 
   return new Promise(resolve => {
     dns.lookup('registry.yarnpkg.com', err => {
-      resolve(err === null);
+      if (err != null && process.env.https_proxy) {
+        // If a proxy is defined, we likely can't resolve external hostnames.
+        // Try to resolve the proxy name as an indication of a connection.
+        dns.lookup(url.parse(process.env.https_proxy).hostname, proxyErr => {
+          resolve(proxyErr == null);
+        });
+      } else {
+        resolve(err == null);
+      }
     });
   });
 }
