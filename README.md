@@ -19,7 +19,7 @@ Because of [the issue in Create-react-app](https://github.com/facebookincubator/
 
 ```sh 
 npm uninstall react react-dom
-npm install preact preact-compat # the second one is optional
+npm install preact preact-compat
 ```
 
 Now you can start dev-server
