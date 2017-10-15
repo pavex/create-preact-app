@@ -249,7 +249,7 @@ function run(
   useYarn
 ) {
   const packageToInstall = getInstallPackage(version);
-  const allDependencies = ['preact', packageToInstall];
+  const allDependencies = ['preact', 'preact-compat', packageToInstall];
 
   console.log('Installing packages. This might take a couple of minutes.');
   getPackageName(packageToInstall)
@@ -488,7 +488,7 @@ function checkAppName(appName) {
   }
 
   // TODO: there should be a single place that holds the dependencies
-  const dependencies = ['preact', 'react-scripts'].sort();
+  const dependencies = ['preact', 'preact-compat', 'react-scripts'].sort();
   if (dependencies.indexOf(appName) >= 0) {
     console.error(
       chalk.red(
