@@ -17,7 +17,7 @@ cd my-app/
 
 Because of [the issue in Create-react-app](https://github.com/facebookincubator/create-react-app/issues/2462) you will need to replace React with Preact manually:
 
-```sh 
+```sh
 npm uninstall react react-dom
 npm install preact preact-compat
 ```
