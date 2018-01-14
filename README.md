@@ -9,10 +9,10 @@ This is fork of [create-react-app](https://github.com/facebookincubator/create-r
 You can use it with the same `create-react-app` command as well as upstream repo. You just need to specify custom versions of react-scripts package:
 
 ```sh
-npm install -g create-react-app
+npx install -g create-react-app
 
-create-react-app my-app --scripts-version @just-boris/preact-scripts
-cd my-app/
+npx create-react-app my-app --scripts-version @just-boris/preact-scripts
+cd my-app
 ```
 
 Because of [the issue in Create-react-app](https://github.com/facebookincubator/create-react-app/issues/2462) you will need to replace React with Preact manually:
