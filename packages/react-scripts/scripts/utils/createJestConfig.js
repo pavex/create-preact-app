@@ -42,6 +42,8 @@ module.exports = (resolve, rootDir, isEjecting) => {
     transformIgnorePatterns: ['[/\\\\]node_modules[/\\\\].+\\.(js|jsx|mjs)$'],
     moduleNameMapper: {
       '^react-native$': 'react-native-web',
+      '^react$': 'preact-compat',
+      '^react-dom$': 'preact-compat',
     },
     moduleFileExtensions: [
       'web.js',
